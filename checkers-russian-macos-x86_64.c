@@ -389,18 +389,30 @@ int init_sdl(void) {
         return 0;
     }
     
-    font = TTF_OpenFont("/System/Library/Fonts/Arial.ttf", 16);
-    if (!font) {
-        font = TTF_OpenFont("/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf", 16);
-        if (!font) {
-            font = TTF_OpenFont("C:/Windows/Fonts/arial.ttf", 16);
-            if (!font) {
-                printf("Failed to load font! SDL_ttf Error: %s\n", TTF_GetError());
-                return 0;
-            }
-        }
+    /* Пробуем шрифты: macOS → Linux DejaVu → Liberation → FreeSans */
+    const char *font_paths[] = {
+        "/System/Library/Fonts/Supplemental/Arial.ttf",
+        "/System/Library/Fonts/Arial.ttf",
+        "/Library/Fonts/Arial.ttf",
+        "/usr/local/share/fonts/dejavu/DejaVuSans.ttf",
+        "/opt/homebrew/share/fonts/dejavu-fonts/DejaVuSans.ttf",
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+        "/usr/share/fonts/dejavu/DejaVuSans.ttf",
+        "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
+        "/usr/share/fonts/liberation/LiberationSans-Regular.ttf",
+        "/usr/share/fonts/truetype/freefont/FreeSans.ttf",
+        "/usr/share/fonts/gnu-free/FreeSans.ttf",
+        NULL
+    };
+    for (int fi = 0; font_paths[fi] != NULL; fi++) {
+        font = TTF_OpenFont(font_paths[fi], 16);
+        if (font) break;
     }
-    
+    if (!font) {
+        printf("Failed to load font! SDL_ttf Error: %s\n", TTF_GetError());
+        return 0;
+    }
+        
     return 1;
 }
 
@@ -1387,6 +1399,31 @@ void render_board(void) {
 }
 
 void render_pieces(void) {
+    /* Мигающая красная подсветка фигур которые обязаны бить */
+    if (game.has_capture && !game.game_over && !game.browse_mode &&
+        game.game_started && game.replay_state == REPLAY_STOPPED) {
+        /* Мигание: 500мс вкл / 500мс выкл */
+        Uint32 t = SDL_GetTicks();
+        int blink_on = (t / 500) % 2 == 0;
+        if (blink_on) {
+            /* Рисуем красный контур вокруг каждой фигуры которая может бить */
+            for (int i = 0; i < game.num_legal_moves; i++) {
+                int r = game.legal_moves[i].from_row;
+                int c = game.legal_moves[i].from_col;
+                /* Проверяем что это захват */
+                if (game.legal_moves[i].num_captures == 0) continue;
+                int x = BOARD_OFFSET_X + c * SQUARE_SIZE;
+                int y = BOARD_OFFSET_Y + r * SQUARE_SIZE;
+                /* Рисуем 3 вложенных красных прямоугольника для толстой линии */
+                for (int d = 1; d <= 3; d++) {
+                    SDL_Rect hl = {x+d, y+d, SQUARE_SIZE-2*d, SQUARE_SIZE-2*d};
+                    SDL_SetRenderDrawColor(renderer, 220, 30, 30, 255);
+                    SDL_RenderDrawRect(renderer, &hl);
+                }
+            }
+        }
+    }
+
     for (int row = 0; row < BOARD_SIZE; row++) {
         for (int col = 0; col < BOARD_SIZE; col++) {
             int piece = get_piece_at(row, col);
